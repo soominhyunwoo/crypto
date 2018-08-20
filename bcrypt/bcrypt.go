@@ -1,3 +1,4 @@
+// MODIFIED BY TENDERMINT TO EXPOSE `salt` in `GenerateFromPassword`.
 // Copyright 2011 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -8,11 +9,9 @@ package bcrypt // import "golang.org/x/crypto/bcrypt"
 
 // The code is a port of Provos and Mazières's C implementation.
 import (
-	"crypto/rand"
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"io"
 	"strconv"
 
 	"golang.org/x/crypto/blowfish"
@@ -86,8 +85,11 @@ type hashed struct {
 // cost. If the cost given is less than MinCost, the cost will be set to
 // DefaultCost, instead. Use CompareHashAndPassword, as defined in this package,
 // to compare the returned hashed password with its cleartext version.
-func GenerateFromPassword(password []byte, cost int) ([]byte, error) {
-	p, err := newFromPassword(password, cost)
+func GenerateFromPassword(salt []byte, password []byte, cost int) ([]byte, error) {
+	if len(salt) != maxSaltSize {
+		return nil, fmt.Errorf("salt len must be %v", maxSaltSize)
+	}
+	p, err := newFromPassword(salt, password, cost)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +129,7 @@ func Cost(hashedPassword []byte) (int, error) {
 	return p.cost, nil
 }
 
-func newFromPassword(password []byte, cost int) (*hashed, error) {
+func newFromPassword(salt []byte, password []byte, cost int) (*hashed, error) {
 	if cost < MinCost {
 		cost = DefaultCost
 	}
@@ -141,13 +143,7 @@ func newFromPassword(password []byte, cost int) (*hashed, error) {
 	}
 	p.cost = cost
 
-	unencodedSalt := make([]byte, maxSaltSize)
-	_, err = io.ReadFull(rand.Reader, unencodedSalt)
-	if err != nil {
-		return nil, err
-	}
-
-	p.salt = base64Encode(unencodedSalt)
+	p.salt = base64Encode(salt)
 	hash, err := bcrypt(password, p.cost, p.salt)
 	if err != nil {
 		return nil, err
